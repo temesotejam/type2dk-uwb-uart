@@ -10,7 +10,26 @@ concurrency:
   group: firmware-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  windows-gui:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Windows GUI, exercise process integration, and render preview
+        shell: powershell
+        run: ./tools/dk6-gui/build.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: type2dk-programmer-windows-gui
+          path: |
+            tools/dk6-gui/out/type2dk-programmer-gui-v1.0.0.zip
+            tools/dk6-gui/out/SHA256SUMS.txt
+            tools/dk6-gui/out/build-info.json
+            tools/dk6-gui/out/preview.png
+            tools/dk6-gui/out/README.md
+          if-no-files-found: error
   build:
+    needs: windows-gui
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +54,10 @@ jobs:
         run: pio run
       - name: Package browser firmware
         run: python scripts/package_firmware.py --sha "$GITHUB_SHA"
+      - uses: actions/download-artifact@v4
+        with:
+          name: type2dk-programmer-windows-gui
+          path: site/tools/dk6-gui/
       - uses: actions/upload-artifact@v4
         with:
           name: type2dk-uwb-uart-firmware-and-installer

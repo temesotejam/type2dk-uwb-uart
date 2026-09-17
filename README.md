@@ -41,7 +41,12 @@ PIO13をGPIOとして使うソフトウェアUARTなので、同じピンでI2C�
 ## 書き込みとログ
 
 CoreS3は[書き込みページ](https://temesotejam.github.io/type2dk-uwb-uart/)から書き込めます。
-2DKは対応するBINをダウンロードし、DK6Programmerを使用します。
+2DKは対応するBINをダウンロードし、[Windows用GUI](https://temesotejam.github.io/type2dk-uwb-uart/tools/dk6-gui/type2dk-programmer-gui-v1.0.0.zip)で
+「DK6Programmer.exe・COMポート・任意のBIN」を選んで「書き込み・照合」を押します。
+既存のDK6Programmerフォルダを指定して使います。Pythonやコマンド入力は不要です。
+[GUIの使い方・検証範囲](tools/dk6-gui/README.md)を参照してください。
+
+コマンドから実行する場合は次の指定です。
 
 ```powershell
 .\DK6Programmer.exe -V 0 -P 1000000 -s COM19 -Y -v -p .\2dk_range_node19_uart_v1.bin
@@ -79,6 +84,7 @@ CoreS3は`RANGE_STAT`と`RANGE_DATA`、19番は`HEALTH`と`RANGE_UART`を出力�
 | `type2dk/ranging/build/` | SDKへの変更・GNU Armでのビルド |
 | `type2dk/src/`、`src/uart_main.cpp` | 単独UART診断版（20バイト・50回/秒） |
 | `validation/hardware/` | 実機の原文ログ・集計結果 |
+| `tools/dk6-gui/` | 任意のBINを選べるWindows用書き込みGUI |
 | `.github/workflows/build.yml` | テスト・CoreS3ビルド・BIN検証・ページ公開 |
 
 CoreS3はPlatformIO 6.1.18を使用します。

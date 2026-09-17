@@ -8,3 +8,4 @@ type2dk/*.bin
 type2dk/*.raw
 
 /build/
+tools/dk6-gui/out/
