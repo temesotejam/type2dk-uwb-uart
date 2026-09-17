@@ -2,6 +2,7 @@
 #include <driver/uart.h>
 #include <driver/gpio.h>
 #include "range_stream.h"
+#include "range_log.h"
 
 namespace {
 constexpr uart_port_t port=UART_NUM_1;
@@ -30,26 +31,39 @@ void draw() {
     canvas.drawString("2DK / UWB " FW_VERSION,12,8);
     canvas.setTextColor(white);canvas.drawString("38400 bps / " + String(state()),12,26);
     for(unsigned i=0;i<2;i++) {
-        const int y=48+46*i;
+        const int y=48+62*i;
         const bool valid=seen && ranging::fresh(r,i,since);
         canvas.setTextColor(valid?cyan:amber);canvas.setTextSize(2);canvas.setCursor(12,y);
         canvas.printf("19-%u  ",i?22u:21u);
         if(valid) canvas.printf("%u.%02u m",r.cm[i]/100,r.cm[i]%100);
         else canvas.print("--.-- m");
         canvas.setTextSize(1);canvas.setTextColor(white);canvas.setCursor(12,y+23);
-        if(seen) canvas.printf("updates %lu  age@TX %u ms",(unsigned long)r.updates[i],r.age[i]);
+        if(seen && r.ready && since<=1000u && (r.seen&(1u<<i)) &&
+           (uint32_t)r.result_age[i]+since+500u<=RANGE_STALE_MS) canvas.printf("nLos(raw) %u  status %02X",r.result_nlos[i],r.status[i]);
+        else canvas.print("nLos(raw) --  status --");
+        canvas.setCursor(12,y+36);
+        if(seen) canvas.printf("OK %lu  FAIL %lu  age %u ms",(unsigned long)r.updates[i],(unsigned long)r.failures[i],r.age[i]);
         else canvas.print("Waiting for measured distance");
     }
-    canvas.setCursor(12,143);canvas.setTextColor(white);
-    if(seen && ranging::fresh(r,2,since)) canvas.printf("A19 %d / %d / %d mg",r.accel[0],r.accel[1],r.accel[2]);
-    else canvas.print("A19 -- / -- / -- mg");
-    canvas.setCursor(12,162);canvas.printf("RX %lu/s  BAD %lu  MISS %lu",(unsigned long)rate,(unsigned long)stats.bad,(unsigned long)stats.missing);
-    canvas.setCursor(12,179);canvas.printf("R_OK %lu  R_BAD %lu",(unsigned long)r.range_ok,(unsigned long)r.range_bad);
-    canvas.setCursor(12,201);canvas.printf("F_ERR %lu / OVF %lu",(unsigned long)framing,(unsigned long)overflow);
-    canvas.setCursor(12,220);canvas.setTextColor(amber);canvas.print("21-22: not transferred");
+    canvas.setCursor(12,169);canvas.setTextColor(white);
+    canvas.printf("RX %lu/s  BAD %lu  MISS %lu",(unsigned long)rate,(unsigned long)stats.bad,(unsigned long)stats.missing);
+    canvas.setCursor(12,186);canvas.printf("R_OK %lu  R_BAD %lu",(unsigned long)r.range_ok,(unsigned long)r.range_bad);
+    canvas.setCursor(12,207);canvas.printf("F_ERR %lu / OVF %lu",(unsigned long)framing,(unsigned long)overflow);
+    canvas.setCursor(12,224);canvas.setTextColor(amber);canvas.print("nLos: raw, unvalidated");
     canvas.fillRoundRect(216,202,96,30,6,cyan);canvas.setTextColor(bg);
     canvas.setTextDatum(middle_center);canvas.drawString("CLEAR",264,217);canvas.setTextDatum(top_left);
     canvas.pushSprite(0,0);
+}
+void logSample(uint32_t now) {
+    if(!Serial) return;
+    const auto &r=stats.sample;
+    char line[512];
+    range_data_line(line,sizeof(line),r,now);
+    Serial.print(line);
+    for(unsigned i=0;i<2;i++) {
+        range_link_line(line,sizeof(line),r,i,now);
+        Serial.print(line);
+    }
 }
 void receive() {
     uart_event_t event;
@@ -69,7 +83,7 @@ void receive() {
         for(int i=0;i<count;i++) if(stats.feed(b[i])) {
             const uint32_t now=millis();
             if(seen && now-lastGood>maxGap) maxGap=now-lastGood;
-            seen=true;lastGood=now;
+            seen=true;lastGood=now;logSample(now);
         }
     }
 }
@@ -79,16 +93,13 @@ void log() {
     if(!Serial) return;
     const auto &r=stats.sample;
     const uint32_t age=seen?now-lastGood:UINT32_MAX;
-    unsigned valid=0;for(unsigned i=0;i<3;i++)if(seen && ranging::fresh(r,i,age))valid|=1u<<i;
     Serial.printf("RANGE_STAT,fw=%s,baud=38400,state=%s,ok=%lu,bad=%lu,missing=%lu,duplicate=%lu,restarts=%lu,backwards=%lu,discarded=%lu,rate=%lu,age_ms=%lu,max_gap_ms=%lu,frame_error=%lu,overflow=%lu,parity=%lu,breaks=%lu,init=%s\n",
       FW_VERSION,state(),(unsigned long)stats.ok,(unsigned long)stats.bad,(unsigned long)stats.missing,
       (unsigned long)stats.duplicates,(unsigned long)stats.restarts,(unsigned long)stats.backwards,
       (unsigned long)stats.discarded,(unsigned long)rate,(unsigned long)age,(unsigned long)maxGap,
       (unsigned long)framing,(unsigned long)overflow,(unsigned long)parity,(unsigned long)breaks,esp_err_to_name(initError));
-    Serial.printf("RANGE_DATA,seq=%lu,boot=%08lx,tx_ms=%lu,ready=%u,valid=%u,d19_21_cm=%u,d19_22_cm=%u,age_at_tx_ms=%u/%u,updates=%lu/%lu,a19_mg=%d/%d/%d,a19_age_at_tx_ms=%u,r_ok=%lu,r_bad=%lu,session=%u/%u,reason=%02x/%02x,irq_us=%u,tx_frame_ms=%u,tx_overruns=%u\n",
-      (unsigned long)r.sequence,(unsigned long)r.boot,(unsigned long)r.uptime,r.ready,valid,r.cm[0],r.cm[1],r.age[0],r.age[1],
-      (unsigned long)r.updates[0],(unsigned long)r.updates[1],r.accel[0],r.accel[1],r.accel[2],r.accel_age,
-      (unsigned long)r.range_ok,(unsigned long)r.range_bad,r.state[0],r.state[1],r.reason[0],r.reason[1],r.irq_us,r.frame_ms,r.overruns);
+    Serial.printf("RANGE_HEALTH,rx_ms=%lu,boot=%08lx,seq=%lu,irq_us=%u,tx_frame_ms=%u,tx_overruns=%u,log_hz=5,rssi=UNAVAILABLE,nlos_check=UNVALIDATED\n",
+        (unsigned long)now,(unsigned long)r.boot,(unsigned long)r.sequence,r.irq_us,r.frame_ms,r.overruns);
 }
 esp_err_t beginRx() {
     // Preserve the internal I2C used by the touch screen.

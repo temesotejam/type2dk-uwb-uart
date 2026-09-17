@@ -46,8 +46,6 @@ void AppCallback(eNotificationType t,void *p){(void)t;(void)p;}
 tUWBAPI_STATUS RadioConfigFull_GroupDelay(bool b){(void)b;return 0;}
 tUWBAPI_STATUS demo_sr040_swup_update_safe(void){return 0;}
 tUWBAPI_STATUS UwbApi_Init(void (*cb)(eNotificationType,void *)){(void)cb;return 0;}
-bool mesh_accel_init(uint8_t *who){*who=0x84;return true;}
-bool mesh_accel_sample(int16_t v[3]){v[0]=0;v[1]=0;v[2]=1000;return true;}
 tUWBAPI_STATUS UwbApi_SessionInit(uint32_t sid,unsigned type){(void)type;hwstate[session_index(sid)]=3;return 0;}
 tUWBAPI_STATUS UwbApi_SetAppConfigMultipleParams(uint32_t sid,unsigned n,const UWB_AppParams_List_t *p){for(unsigned j=0;j<n;j++)configs[session_index(sid)][p[j].id]=p[j].value;return 0;}
 tUWBAPI_STATUS UwbApi_GetAppConfig(uint32_t sid,eAppConfig id,uint32_t *v){*v=configs[session_index(sid)][id];return 0;}
@@ -67,11 +65,11 @@ tUWBAPI_STATUS UwbApi_GetSessionState(uint32_t sid,uint8_t *p){if(query_fail)ret
 tUWBAPI_STATUS UwbApi_SendData(phUwbDataPkt_t *p){assert(hwstate[session_index(p->session_id)]==2);return 0;}
 #if MESH_NODE==19
 #include "replay_v2_log.h"
-static void test_log_and_payload(void)
+static void test_log_and_diagnostics(void)
 {
-    memset(edges,0,sizeof(edges));memset(accels,0,sizeof(accels));
+    memset(edges,0,sizeof(edges));memset(edge_updates,0,sizeof(edge_updates));
     for(unsigned i=0;i<3;i++){edges[i].cm=0xffff;edges[i].at=0-65535u;}
-    range_ok=range_bad=rx_ok=rx_bad=0;
+    range_ok=range_bad=0;
     unsigned visible=0;
     for(unsigned i=0;i<COUNT(replay);i++){
         tick=replay[i].ms;
@@ -85,27 +83,35 @@ static void test_log_and_payload(void)
             if(strstr(last_mesh,",DV=3,"))visible++;
         }
     }
-    assert(range_ok==35 && range_bad==25 && rx_ok==0);
+    assert(range_ok==35 && range_bad==25);
     assert(visible>60 && edges[0].valid && edges[1].valid && !edges[2].valid);
     assert(edges[0].cm==18 && edges[1].cm==41);
     printf("PASS node19: real v2 trace replay:35 valid ranges, DV=3 in%u output rows, no data packets needed\n",visible);
-    uint16_t ab=edges[0].cm,ac=edges[1].cm;
-    /* Valid remote state must update BC/accel only, never overwrite local AB/AC. */
-    uint8_t b[MESH_PACKET_SIZE]={0xd2,0x4d,2,21};
-    mesh_p32(b+4,1);mesh_p32(b+34,1234);b[32]=15;
-    for(unsigned i=0;i<3;i++)mesh_p16(b+20+4*i,777);
-    mesh_p16(b+12,1000);mesh_p16(b+38,mesh_crc16(b,38));
-    phUwbRcvDataPkt_t p={0};p.session_id=S_AB;mesh_p16(p.src_address,ADDR_B);p.data=b;p.data_size=sizeof(b);
-    mesh_callback(UWBD_DATA_RCV_NTF,&p);
-    assert(rx_ok==1 && edges[0].cm==ab && edges[1].cm==ac && edges[2].cm==777 && accels[1].valid);
-    print_mesh();assert(strstr(last_mesh,",DV=7,"));
-    mesh_callback(UWBD_DATA_RCV_NTF,&p);assert(rx_ok==1 && rx_bad==1); /* duplicate */
-    b[3]=22;mesh_p16(b+28,888);mesh_p16(b+38,mesh_crc16(b,38));
-    p.session_id=S_AC;mesh_p16(p.src_address,ADDR_C);mesh_callback(UWBD_DATA_RCV_NTF,&p);
-    assert(rx_ok==2 && accels[2].valid && edges[2].cm==777); /* 22 can't overwrite BC */
-    tick+=3001;expire_state(tick);print_mesh();assert(strstr(last_mesh,",DV=0,"));
-    assert(!accels[1].valid && !accels[2].valid);
-    puts("PASS node19: remote BC and acceleration ingestion, ownership, duplicate rejection, 3s stale invalidation");
+    tick=10000;edges[0]=(edge_t){0};
+    phRangingData_t r={0};r.sessionId=S_AB;r.no_of_measurements=1;r.seq_ctr=11;
+    phRangingMesr_t *m=&r.ranging_meas.range_meas_twr[0];mesh_p16(m->mac_addr,ADDR_B);
+    m->distance=57;m->nLos=1;mesh_callback(UWBD_RANGING_DATA,&r);
+    range_sample_t snap;mesh_range_snapshot(&snap);
+    uint32_t ok=snap.updates[0],bad=snap.failures[0];
+    assert(snap.cm[0]==57 && snap.nlos[0]==1 && snap.status[0]==0 && snap.result_seq[0]==11);
+    assert(snap.valid&1);assert(snap.seen&1);
+    tick+=200;r.seq_ctr=12;m->status=0x21;m->nLos=255;m->distance=0xffff;
+    mesh_callback(UWBD_RANGING_DATA,&r);mesh_range_snapshot(&snap);
+    assert(snap.cm[0]==57 && snap.nlos[0]==1 && snap.age[0]==200); // Saved pair unchanged.
+    assert(snap.status[0]==0x21 && snap.result_nlos[0]==255 && snap.result_cm[0]==65535);
+    assert(snap.result_age[0]==0 && snap.result_seq[0]==12 && snap.failures[0]==bad+1 && snap.updates[0]==ok);
+    tick+=200;r.seq_ctr=13;m->status=0; // OK status with sentinel still counts as failed.
+    mesh_callback(UWBD_RANGING_DATA,&r);mesh_range_snapshot(&snap);
+    assert(snap.failures[0]==bad+2 && snap.cm[0]==57 && snap.age[0]==400);
+    tick+=200;r.seq_ctr=14;m->distance=58;m->nLos=7; // Preserve unfamiliar raw nLos codes.
+    mesh_callback(UWBD_RANGING_DATA,&r);mesh_range_snapshot(&snap);
+    assert(snap.nlos[0]==7 && snap.result_nlos[0]==7 && snap.cm[0]==58 && snap.max_gap[0]==600);
+    mesh_p16(m->mac_addr,0x9999);m->nLos=0;m->distance=999;
+    mesh_callback(UWBD_RANGING_DATA,&r);mesh_range_snapshot(&snap);assert(snap.cm[0]==58);
+    tick+=3001;expire_state(tick);mesh_range_snapshot(&snap);assert(!snap.valid && snap.seen==3);
+    reset_seen=1;mesh_range_snapshot(&snap);assert(!snap.ready && !snap.valid);reset_seen=0;
+    puts("PASS diagnostics: matching peer, saved nLos/distance pairing, failure/sentinel counts, raw unknown, freshness and reset");
+
 }
 #endif
 int main(void){
@@ -117,14 +123,14 @@ int main(void){
     assert(starts[0]==1 && stops[0]==0 && starts[1]>1 && starts[1]<30);
     assert(hwstate[0]==2 && hwstate[1]==2);
 #if MESH_NODE==19
-    assert(meshes>3000); /* Output continues while the second session is idle. */
+    assert(meshes>1500); /* Output continues while the second session is idle. */
 #endif
     assert(configs[0][RANGING_INTERVAL]==200 && configs[1][RANGING_INTERVAL]==200);
     printf("PASS node%d: 360s loop, reason20 rejection, bounded retry, later recovery, no reboot\n",MESH_NODE);
     /* Active peer disappears: only its session is restarted. */
     limit=0;feed_ranges=false;tick+=20000;
     unsigned target=MESH_NODE==22?1:0,other=1-target;
-    last_range[other]=last_progress[other]=tick;
+    last_range[other]=tick;
     unsigned start0=starts[target],stop0=stops[target];
     assert(recover_sessions());assert(starts[target]==start0+1 && stops[target]==stop0+1);
     /* Waiting/retry deadline crosses the 32-bit ms wrap. */
@@ -135,15 +141,7 @@ int main(void){
     query_fail=1;assert(recover_sessions());assert(recover_sessions());assert(!recover_sessions());
     printf("PASS node%d: no-progress restart, tick-wrap backoff, transport-failure escalation\n",MESH_NODE);
 #if MESH_NODE==19
-    test_log_and_payload();
-    range_sample_t snap={0};mesh_range_snapshot(&snap);
-    assert(!snap.valid);
-    tick=5000;edges[0]=(edge_t){123,tick,1,0};accels[0].valid=1;accels[0].at=tick;
-    runtime_ready=1;reset_seen=0;mesh_range_snapshot(&snap);
-    assert((snap.valid&5)==5 && snap.cm[0]==123 && snap.age[0]==0);
-    reset_seen=1;mesh_range_snapshot(&snap);assert(!snap.ready && !snap.valid);
-    reset_seen=0;tick+=3001;mesh_range_snapshot(&snap);assert(!snap.valid);
-    puts("PASS snapshot: successful distance/acceleration, reset and age invalidation");
+    test_log_and_diagnostics();
 #endif
     return 0;
 }

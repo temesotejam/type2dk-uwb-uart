@@ -8,19 +8,13 @@ def replace(rel,old,new,count=1):
  if new in t:return
  if t.count(old)!=count:raise RuntimeError('Unexpected SDK contents: '+rel)
  f.write_text(t.replace(old,new))
-# Expose the existing complete-transaction TML mutex for sensor bus arbitration.
-rel='libs/halimpl/transport/SPI/SR040/uwb_uwbs_tml_interface.c'
-replace(rel,'static UWBStatus_t spi_assert_cs','void *gMeshTmlMutex;\n\nstatic UWBStatus_t spi_assert_cs')
-replace(rel,'    status = (UWBStatus_t)phOsalUwb_DeleteMutex(&(pCtx->mSyncMutex));','    gMeshTmlMutex = NULL;\n    status = (UWBStatus_t)phOsalUwb_DeleteMutex(&(pCtx->mSyncMutex));')
-replace(rel,'    status = (UWBStatus_t)phOsalUwb_CreateMutex(&(pCtx->mSyncMutex));','    status = (UWBStatus_t)phOsalUwb_CreateMutex(&(pCtx->mSyncMutex));\n    gMeshTmlMutex = pCtx->mSyncMutex;')
-rel='boards/FinderV3_SPI/uwb_bus_interface.c'
-replace(rel,'uwb_bus_status_t uwb_bus_init(','''static spi_master_config_t gMeshUwbSpiConfig;
-const spi_master_config_t *Mesh_GetUwbSpiConfig(void) { return &gMeshUwbSpiConfig; }
-
-uwb_bus_status_t uwb_bus_init(''')
-replace(rel,'    // SPI_MasterGetDefaultConfig(&masterConfig);','    gMeshUwbSpiConfig = masterConfig;\n    // SPI_MasterGetDefaultConfig(&masterConfig);')
 # Leave SRAM1 headroom for the larger app task and the SDK UWB tasks/queues.
 replace('boards/Host/FinderV3/FreeRTOSConfig.h',
         '#define configTOTAL_HEAP_SIZE            ((size_t)(30 * 1024))',
         '#define configTOTAL_HEAP_SIZE            ((size_t)(48 * 1024))')
-print('Mesh SDK integration applied')
+# The SDK configures the accelerometer before starting the application as well.
+# Skip that call for our ranging build; --stock retains the vendor behavior.
+replace('demos/common/Standalone_Main_qn9090.c',
+        '    ACCEL_Configure();',
+        '#if !defined(MESH_NODE)\n    ACCEL_Configure();\n#endif')
+print('Ranging v2 SDK integration applied (no accelerometer bus switching)')

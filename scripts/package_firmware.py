@@ -45,7 +45,7 @@ def main():
     checksums = []
     packages = Path.home() / '.platformio/packages'
     for variant, version, title in [
-        ('range', '1.3.0-range', 'CoreS3 Type2DK UWB Ranging'),
+        ('range', '1.4.0-range', 'CoreS3 Type2DK UWB Ranging'),
         ('uart', '1.2.0-uart', 'CoreS3 Type2DK UART RX Test'),
     ]:
         build = ROOT / f'.pio/build/cores3_{variant}'
@@ -101,10 +101,24 @@ def main():
             archive.writestr(name, image)
         archive.writestr('snapshot.json', json.dumps(snapshot, indent=2) + '\n')
         archive.writestr('SHA256SUMS.txt', '\n'.join(f'{s}  {n}' for n, s in snapshot['sha256'].items()) + '\n')
-        archive.writestr('README.md', (ROOT / 'type2dk/ranging/README.md').read_bytes())
+        archive.writestr('README.md', (ROOT / 'firmware/known-good/README-v1.md').read_bytes())
         for license_file in sorted((site / 'licenses').iterdir()):
             if license_file.is_file():
                 archive.write(license_file, 'licenses/' + license_file.name)
+    current_zip = output / 'type2dk-uwb-uart-1.4.0.zip'
+    with zipfile.ZipFile(current_zip, 'w', zipfile.ZIP_DEFLATED) as archive:
+        names = ['cores3-range-merged.bin', '2dk_range_node19_uart_v2.bin',
+                 '2dk_range_node21_peer_v2.bin', '2dk_range_node22_peer_v2.bin']
+        for name in names:
+            archive.write(output / name, name)
+        archive.writestr('SHA256SUMS.txt', '\n'.join(f'{digest((output/n).read_bytes())}  {n}' for n in names) + '\n')
+        archive.writestr('README.md', (ROOT / 'type2dk/ranging/README.md').read_bytes())
+        archive.writestr('type2dk-build.json', (ROOT / 'type2dk/ranging/firmware/v2-build.json').read_bytes())
+        archive.writestr('cores3-build.json', (site / 'build-info-range.json').read_bytes())
+        for license_file in sorted((site / 'licenses').iterdir()):
+            if license_file.is_file():
+                archive.write(license_file, 'licenses/' + license_file.name)
+    checksums.append(f'{digest(current_zip.read_bytes())}  {current_zip.name}')
     checksums.append(f'{digest(tested_zip.read_bytes())}  {tested_zip.name}')
     (output / 'SHA256SUMS').write_text('\n'.join(checksums) + '\n')
     (site / 'tested-snapshot.json').write_text(json.dumps(snapshot, indent=2) + '\n')

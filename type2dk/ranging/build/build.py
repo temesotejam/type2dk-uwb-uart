@@ -62,7 +62,7 @@ ld=(sdk/'boards/FinderV3_SPI/QN9090_UWB_TAG_FW.ld').read_text()
 ld=re.sub(r'GROUP\s*\(.*?\)','',ld,flags=re.S)
 (out/'firmware.ld').write_text(ld)
 suffix=('no_uart' if a.uart_off else 'uart') if a.node==19 else 'peer'
-elf=out/f'2dk_range_node{a.node}_{suffix}_v1.elf'
+elf=out/f'2dk_range_node{a.node}_{suffix}_v2.elf'
 libs=[str(f) for f in (sdk/'ext/boards/qn9090/bluetooth/libs').glob('*.a')]
 cmd=[prefix+'gcc','-mcpu=cortex-m4','-mthumb','-mfloat-abi=soft','-nostartfiles','--specs=nano.specs','--specs=nosys.specs','-Wl,--defsym=__heap_size__=4096','-Wl,--gc-sections','-Wl,--print-memory-usage','-Wl,-Map='+str(out/'firmware.map'),'-T',str(out/'firmware.ld')]+[r[2] for r in results]+['-Wl,--start-group']+libs+['-lc_nano','-lm','-lgcc','-lnosys','-Wl,--end-group','-o',str(elf)]
 r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)

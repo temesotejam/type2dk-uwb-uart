@@ -1,6 +1,6 @@
 /* Background software UART. Never alter the RTOS SysTick or SDK timers.
  * One byte masks IRQs for start+8 data bits (~235 us); the stop bit is
- * interruptible. Sleep one RTOS tick after every four bytes (~1 ms).
+ * interruptible. Sleep one RTOS tick after every four bytes (5 ms in this SDK).
  * This bounds interference; ranging coexistence still needs a board test.
  */
 #include "range_uart.h"
@@ -88,10 +88,10 @@ void range_uart_start(void) {
 }
 void range_uart_log(void) {
 #if MESH_UART_ENABLE
-    PRINTF("RANGE_UART,v=1,baud=38400,frames=%lu,irq_us=%lu,frame_ms=%lu,overruns=%lu,fault=%lu\r\n",
+    PRINTF("RANGE_UART,v=2,baud=38400,frames=%lu,irq_us=%lu,frame_ms=%lu,overruns=%lu,fault=%lu\r\n",
        (unsigned long)frames,(unsigned long)(max_irq_cycles/(SystemCoreClock/1000000u)),
        (unsigned long)frame_ms,(unsigned long)overruns,(unsigned long)timer_fault);
 #else
-    PRINTF("RANGE_UART,v=1,enabled=0\r\n");
+    PRINTF("RANGE_UART,v=2,enabled=0\r\n");
 #endif
 }

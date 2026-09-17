@@ -26,10 +26,10 @@ struct Stream {
     }
 };
 // The sender's age is at snapshot time. A 500 ms transport allowance makes
-// this display conservative; the wire is only ~90 ms in the nominal build.
+// this display conservative; v2 sends 96 bytes and yields after every four.
 inline bool fresh(const range_sample_t &s,unsigned item,uint32_t sinceRx) {
-    if(!s.ready || item>2 || !(s.valid&(1u<<item)) || sinceRx>1000u) return false;
-    const uint32_t age=item<2?s.age[item]:s.accel_age;
+    if(!s.ready || item>1 || !(s.valid&(1u<<item)) || sinceRx>1000u) return false;
+    const uint32_t age=s.age[item];
     return age+sinceRx+500u<=RANGE_STALE_MS;
 }
 }

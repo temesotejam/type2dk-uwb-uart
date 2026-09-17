@@ -1,27 +1,35 @@
 # type2dk-uwb-uart
 
 Murata Type2DKのUWB測距結果を、PIO13から送信専用UARTでM5Stack CoreS3へ渡すプロジェクトです。
-**19–21・19–22の距離と19番本体の加速度を、38400 bpsで毎秒5回送信します。**
+**19–21・19–22の距離とnLos・通信診断情報を、38400 bpsで毎秒5回送信します。**
 
 [書き込み・ダウンロードページ](https://temesotejam.github.io/type2dk-uwb-uart/) ·
 [配線・書き込みの詳しい手順](type2dk/ranging/README.md) ·
 [実機確認記録](validation/hardware/README.md)
 
-## 動作確認した構成
+## 現在の版：1.4.0-range / Type2DK v2
 
-2026-09-17にCoreS3の画面表示と実機ログを確認しました。提示された32秒間では、
-UART正常受信160回、19–21・19–22の測距成功が各160回で、UARTエラー・欠落・新たな測距失敗は0回でした。
-加速度も全表示行で有効でした。
+距離に加え、相手ごとのnLos生値・測距結果コード・失敗累計・最大更新間隔・
+セッション状態・開始試行回数を記録します。加速度の初期化・読み取り・転送・表示は削除しました。
+CoreS3はUART受信ごとに約5回/秒ログを出します。
 
 | 機器 | ファームウェア | 役割 |
 |---|---|---|
-| 19番Type2DK | `2dk_range_node19_uart_v1.bin` | 2系統の距離と本体加速度をUART送信 |
-| 21番Type2DK | `2dk_range_node21_peer_v1.bin` | 19・22との測距 |
-| 22番Type2DK | `2dk_range_node22_peer_v1.bin` | 19・21との測距 |
-| M5Stack CoreS3 | `1.3.0-range` | UART受信・距離と加速度の表示 |
+| 19番Type2DK | `2dk_range_node19_uart_v2.bin` | 2距離と診断情報をUART送信 |
+| 21番Type2DK | `2dk_range_node21_peer_v2.bin` | 19・22との測距 |
+| 22番Type2DK | `2dk_range_node22_peer_v2.bin` | 19・21との測距 |
+| M5Stack CoreS3 | `1.4.0-range` | UART受信・距離と通信状態の表示 |
 
-21–22の距離および21・22の加速度は、CoreS3へ転送しません。
-19・21・22は基板の役割名です。PCのCOM番号は環境に応じて確認してください。
+**4台とも更新してください。** CoreS3 v1.4.0と19番v2は96バイト形式の組み合わせです。
+nLosは生値で記録し、遮蔽の確定判定には使いません。SR040での判定性能は実機未確認です。
+RSSIは通常測距通知から取得していないため、未取得と明示します。
+21–22の距離はCoreS3へ転送しません。COM番号は環境に応じて確認してください。
+
+[新しい4台分のBINセット](https://temesotejam.github.io/type2dk-uwb-uart/firmware/type2dk-uwb-uart-1.4.0.zip)
+
+旧v1（CoreS3 1.3.0-range）は2026-09-17に実機確認済みです。提示された32秒間で
+UART正常受信160回、2距離の成功各160回、新たなエラー・欠落は0回でした。
+その記録と固定BINは下記に残しています。v2の実機確認結果ではありません。
 
 ## 配線
 
@@ -49,9 +57,9 @@ CoreS3は[書き込みページ](https://temesotejam.github.io/type2dk-uwb-uart/
 コマンドから実行する場合は次の指定です。
 
 ```powershell
-.\DK6Programmer.exe -V 0 -P 1000000 -s COM19 -Y -v -p .\2dk_range_node19_uart_v1.bin
-.\DK6Programmer.exe -V 0 -P 1000000 -s COM21 -Y -v -p .\2dk_range_node21_peer_v1.bin
-.\DK6Programmer.exe -V 0 -P 1000000 -s COM22 -Y -v -p .\2dk_range_node22_peer_v1.bin
+.\DK6Programmer.exe -V 0 -P 1000000 -s COM19 -Y -v -p .\2dk_range_node19_uart_v2.bin
+.\DK6Programmer.exe -V 0 -P 1000000 -s COM21 -Y -v -p .\2dk_range_node21_peer_v2.bin
+.\DK6Programmer.exe -V 0 -P 1000000 -s COM22 -Y -v -p .\2dk_range_node22_peer_v2.bin
 ```
 
 | 通信 | 速度 |
@@ -79,8 +87,8 @@ CoreS3は`RANGE_STAT`と`RANGE_DATA`、19番は`HEALTH`と`RANGE_UART`を出力�
 | パス | 内容 |
 |---|---|
 | `src/range_main.cpp` | CoreS3の実測値受信・表示 |
-| `include/range_frame.h`、`include/range_stream.h` | 64バイトの通信形式・受信処理 |
-| `type2dk/ranging/source/` | 2DKの測距・加速度・UART送信 |
+| `include/range_frame.h`、`include/range_stream.h` | 96バイトの通信形式・受信処理 |
+| `type2dk/ranging/source/` | 2DKの測距・通信診断・UART送信 |
 | `type2dk/ranging/build/` | SDKへの変更・GNU Armでのビルド |
 | `type2dk/src/`、`src/uart_main.cpp` | 単独UART診断版（20バイト・50回/秒） |
 | `validation/hardware/` | 実機の原文ログ・集計結果 |
@@ -101,13 +109,12 @@ SDK本体は含めていません。CIではCoreS3をビルドし、2DKは保存
 
 診断版は[UART診断ページ](https://temesotejam.github.io/type2dk-uwb-uart/uart.html)と
 [診断版の説明](type2dk/UART_README.md)を参照してください。
-測距への影響を比較するための`2dk_range_node19_no_uart_v1.bin`も残しています。
+測距への影響を比較するための`2dk_range_node19_no_uart_v2.bin`も残しています。
 
 ## 移行元とライセンス
 
 [M5stackCORES3I2CdemoUWBの3a336da](https://github.com/temesotejam/M5stackCORES3I2CdemoUWB/tree/3a336da2c2b6b4a0712ef994446019071b0dca4b)
-からUART部分を独立させました。移行時点の実機用ソースと2DK BINはそのままです。
-今回の保存・整理だけで、実機を書き換える必要はありません。
+からUART部分を独立させました。旧版の実機用BINは固定して残しています。現在はv2の診断機能を追加しています。
 
 Type2DK用BINにはNXP SDKなどのコンポーネントを含み、それぞれのライセンスが適用されます。
 [構成・ライセンス通知](type2dk/ranging/licenses/)を参照してください。

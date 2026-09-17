@@ -1,0 +1,31 @@
+{
+  "firmware": "TYPE2DK_RANGE_UART_V2",
+  "wire_version": 2,
+  "frame_bytes": 96,
+  "sdk": "UWBIOT_SR040_v04.03.14_MCUx",
+  "compiler": "xPack Arm GNU 13.2.1-1.1",
+  "hardware_tested": false,
+  "nlos_semantics_validated": false,
+  "images": {
+    "2dk_range_node19_uart_v2.bin": {
+      "bytes": 277864,
+      "sha256": "4749ab0952c6b4052a1a717ddb7324e3dd09a3144f080c546505c9470181708c",
+      "accelerometer_symbols_present": false
+    },
+    "2dk_range_node19_no_uart_v2.bin": {
+      "bytes": 276432,
+      "sha256": "56c965ae4fc1fa489a2cfa43ffe41cd25ea16ac9010182dc190a59a185ca055e",
+      "accelerometer_symbols_present": false
+    },
+    "2dk_range_node21_peer_v2.bin": {
+      "bytes": 275744,
+      "sha256": "c574b6744d0c56b9f19b074f97faadb2b3e10c31676b1925cef145fbabcdc981",
+      "accelerometer_symbols_present": false
+    },
+    "2dk_range_node22_peer_v2.bin": {
+      "bytes": 275728,
+      "sha256": "fb4da70ca0db9624ef7919e281ce30d3515a64ba366b1a9894cb5e638a24ecf1",
+      "accelerometer_symbols_present": false
+    }
+  }
+}
