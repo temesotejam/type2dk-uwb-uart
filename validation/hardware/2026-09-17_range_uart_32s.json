@@ -1,0 +1,25 @@
+{
+  "log_sha256": "4c85541452ddaa984a8da68106048e52c2fa53d21f451f8e5388798066a40496",
+  "stat_rows": 33,
+  "data_rows": 33,
+  "interval_ms": 32000,
+  "uart_frames": 160,
+  "range_successes": [
+    160,
+    160
+  ],
+  "range_bad_first_last": [
+    62,
+    62
+  ],
+  "all_uart_error_counters_zero": true,
+  "all_reported_measurements_valid": true,
+  "tx_frame_ms": [
+    80,
+    90
+  ],
+  "irq_us": [
+    235
+  ],
+  "tx_overruns": 0
+}

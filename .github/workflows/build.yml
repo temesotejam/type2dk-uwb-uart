@@ -1,0 +1,62 @@
+name: Build firmware and publish installer
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: pip install platformio==6.1.18
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+      - name: Test frame decoder and counters
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude test/uart_stream_test.cpp -o /tmp/uart_test
+          /tmp/uart_test
+          g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude test/range_stream_test.cpp -o /tmp/range_test
+          /tmp/range_test
+          bash type2dk/ranging/validation/host/run_tests.sh
+          python scripts/verify_hardware_log.py
+      - name: Build CoreS3 firmware
+        run: pio run
+      - name: Package browser firmware
+        run: python scripts/package_firmware.py --sha "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: type2dk-uwb-uart-firmware-and-installer
+          path: site/
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          path: site/
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Publish installer
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,14 @@
+{
+  "description": "Images distributed with source commit 3a336da and used for the reported 32-second hardware test.",
+  "upstream_repository": "https://github.com/temesotejam/M5stackCORES3I2CdemoUWB",
+  "upstream_commit": "3a336da2c2b6b4a0712ef994446019071b0dca4b",
+  "cores3_version": "1.3.0-range",
+  "type2dk_version": "TYPE2DK_RANGE_UART_V1",
+  "hardware_log": "validation/hardware/2026-09-17_range_uart_32s.log",
+  "sha256": {
+    "2dk_range_node19_uart_v1.bin": "d619757112b59efe6a0132a70969d963afe0cb39ac8aeabf49781e2569d95271",
+    "2dk_range_node21_peer_v1.bin": "b7521ab5f8caf6b748292d425fca50b05517b2b380bb4fc06d080b4ca8265218",
+    "2dk_range_node22_peer_v1.bin": "b95d70eca22326f45731256dc12ac8d34305bacfe1bcd06a962090c54da9f991",
+    "cores3-range-merged.bin": "f8c95e57a929a02949ae241e7f0959c6c0673f307d93f2d18e91001e0c59390a"
+  }
+}

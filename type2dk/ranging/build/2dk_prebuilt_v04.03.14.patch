@@ -1,0 +1,174 @@
+diff --git boards/FinderV3_SPI/board.c boards/FinderV3_SPI/board.c
+index 3a4307d..306867e 100644
+--- boards/FinderV3_SPI/board.c
++++ boards/FinderV3_SPI/board.c
+@@ -2370,7 +2370,9 @@ void ACCEL_Configure(void)
+     readAccelerometerRegister(FXLS8962_WHO_AM_I, &whoami);
+     if ((whoami != FXLS8962AF_WHOAMI_VALUE) && (whoami != FXLS8964AF_WHOAMI_VALUE) &&
+         (whoami != FXLS8967AF_WHOAMI_VALUE)) {
++#if UWBIOT_APP_BUILD__DEMO_TRACKER_ACCEL_TRIGGER
+         PRINTF("%s Error : Incorrect WHOAMI value : 0x%02X\n", __FUNCTION__, whoami);
++#endif
+         return;
+     }
+ 
+@@ -2394,9 +2396,11 @@ void ACCEL_Configure(void)
+     SPI_WRITE(FXLS8962_SENS_CONFIG1, FXLS8962_SENS_CONFIG1_FSR_4G, FXLS8962_SENS_CONFIG1_FSR_MASK);
+ 
+     /* Set Wake ODR as 100Hz & Sleep Mode ODR as 25Hz. */
+-    SPI_WRITE(FXLS8962_SENS_CONFIG3,
+-        FXLS8962_SENS_CONFIG3_WAKE_ODR_100HZ | FXLS8962_SENS_CONFIG3_WAKE_ODR_25HZ,
+-        FXLS8962_SENS_CONFIG3_WAKE_ODR_MASK | FXLS8962_SENS_CONFIG3_SLEEP_ODR_MASK);
++//    SPI_WRITE(FXLS8962_SENS_CONFIG3,
++//        FXLS8962_SENS_CONFIG3_WAKE_ODR_100HZ | FXLS8962_SENS_CONFIG3_WAKE_ODR_25HZ,
++//        FXLS8962_SENS_CONFIG3_WAKE_ODR_MASK | FXLS8962_SENS_CONFIG3_SLEEP_ODR_MASK);
++    SPI_WRITE(FXLS8962_SENS_CONFIG3, FXLS8962_SENS_CONFIG3_WAKE_ODR_100HZ, FXLS8962_SENS_CONFIG3_WAKE_ODR_MASK);
++    SPI_WRITE(FXLS8962_SENS_CONFIG3, FXLS8962_SENS_CONFIG3_SLEEP_ODR_25HZ, FXLS8962_SENS_CONFIG3_SLEEP_ODR_MASK);
+ 
+     /* Enable SDCD OT for all 3 axes X, Y & Z and within-thresholds event latch disabled. */
+     SPI_WRITE(FXLS8962_SDCD_CONFIG1,
+diff --git boards/Host/FinderV3/UWBT_Config.c boards/Host/FinderV3/UWBT_Config.c
+index 35387ec..3c2a49b 100644
+--- boards/Host/FinderV3/UWBT_Config.c
++++ boards/Host/FinderV3/UWBT_Config.c
+@@ -16,7 +16,7 @@
+ 
+ #include "fsl_debug_console.h"
+ 
+-#define BLE_DFLT_INTERVAL 0x0140
++#define BLE_DFLT_INTERVAL 0x0C80
+ 
+ typedef struct
+ {
+diff --git demos/SR040/demo_nearby_interaction/src/TLV_Mng.c demos/SR040/demo_nearby_interaction/src/TLV_Mng.c
+index 61fc730..e091e05 100644
+--- demos/SR040/demo_nearby_interaction/src/TLV_Mng.c
++++ demos/SR040/demo_nearby_interaction/src/TLV_Mng.c
+@@ -113,6 +113,9 @@ static void handleTLV(uint8_t deviceId, uint8_t *data)
+     switch (*data) {
+     case kMsg_ConfigureAndStart: {
+         mSessionState[deviceId] = notStarted;
++        const UWB_AppParams_List_t SetAppParamsList[] = {
++        		UWB_SET_APP_PARAM_VALUE(TX_ADAPTIVE_PAYLOAD_POWER, 1)
++        };
+         /* Received configure command with Shareable data
+          * Apply the Shareable data and start UWB ranging
+          *
+@@ -184,7 +187,7 @@ static void handleTLV(uint8_t deviceId, uint8_t *data)
+             LOG_MAU8_I("mac addr :", profileInfo.mac_addr, 2);
+ 
+             uwb_status = UwbApi_ConfigureData_iOS(
+-                data + 1, *(data + SHAREABLE_DATA_LENGTH_OFFSET) + SHAREABLE_DATA_HEADER_LENGTH, &profileInfo, 0, NULL);
++                data + 1, *(data + SHAREABLE_DATA_LENGTH_OFFSET) + SHAREABLE_DATA_HEADER_LENGTH, &profileInfo, sizeof(SetAppParamsList) / sizeof(SetAppParamsList[0]), &SetAppParamsList[0]);
+             if (uwb_status != UWBAPI_STATUS_OK) {
+                 LOG_E("Shareable data not configured");
+                 /* If the status if HPD wake up then try to do it one more time */
+@@ -196,8 +199,8 @@ static void handleTLV(uint8_t deviceId, uint8_t *data)
+                     uwb_status = UwbApi_ConfigureData_iOS(data + 1,
+                         *(data + SHAREABLE_DATA_LENGTH_OFFSET) + SHAREABLE_DATA_HEADER_LENGTH,
+                         &profileInfo,
+-                        0,
+-                        NULL);
++						sizeof(SetAppParamsList) / sizeof(SetAppParamsList[0]),
++						&SetAppParamsList[0]);
+                     if (uwb_status != UWBAPI_STATUS_OK) {
+                         LOG_E("Shareable data not configured");
+                     }
+@@ -234,6 +237,14 @@ static void handleTLV(uint8_t deviceId, uint8_t *data)
+          * Fill the ConfigData and send it over BLE to the phone application
+          */
+ 
++#if defined(cPWR_UsePowerDownMode) && (cPWR_UsePowerDownMode)
++    	UWBT_PowerModeEnter(UWBT_RUN_MODE);
++#endif /* cPWR_UsePowerDownMode */
++
++    	if (!handleDeviceInit()) {
++    	    LOG_E("Device init failed");
++    	}
++
+         /* Application related definitions */
+         uint8_t SpecMajorVersion[] = SPEC_VERSION_MAJOR;
+         uint8_t SpecMinorVersion[] = SPEC_VERSION_MINOR;
+@@ -308,6 +319,15 @@ static void handleTLV(uint8_t deviceId, uint8_t *data)
+         /* Start command received
+          * Fill the ConfigData and send it over BLE to the phone application
+          */
++
++#if defined(cPWR_UsePowerDownMode) && (cPWR_UsePowerDownMode)
++    	UWBT_PowerModeEnter(UWBT_RUN_MODE);
++#endif /* cPWR_UsePowerDownMode */
++
++    	if (!handleDeviceInit()) {
++    	    LOG_E("Device init failed");
++    	}
++
+         mDevice[deviceId] = android_c;
+ 
+         /* UWB related definitions */
+diff --git demos/SR040/demo_nearby_interaction/src/ble_server.c demos/SR040/demo_nearby_interaction/src/ble_server.c
+index 0ba67c8..3da65f4 100644
+--- demos/SR040/demo_nearby_interaction/src/ble_server.c
++++ demos/SR040/demo_nearby_interaction/src/ble_server.c
+@@ -474,18 +474,18 @@ static void BleApp_ConnectionCallback(deviceId_t peerDeviceId, gapConnectionEven
+ 
+     switch (pConnectionEvent->eventType) {
+     case gConnEvtConnected_c: {
+-#if defined(cPWR_UsePowerDownMode) && (cPWR_UsePowerDownMode)
+-        UWBT_PowerModeEnter(UWBT_RUN_MODE);
+-#endif /* cPWR_UsePowerDownMode */
++//#if defined(cPWR_UsePowerDownMode) && (cPWR_UsePowerDownMode)
++//        UWBT_PowerModeEnter(UWBT_RUN_MODE);
++//#endif /* cPWR_UsePowerDownMode */
+         mPeerInformation[peerDeviceId].deviceId = peerDeviceId;
+ 
+         if (phOsalUwb_ConsumeSemaphore_WithTimeout(mTlvMutex, BLE_CONN_CB_MAX_REENTRANCE_TIMEOUT) !=
+             UWBSTATUS_SUCCESS) {
+             LOG_E("Ble connection callback timeout");
+         }
+-        if (!handleDeviceInit()) {
+-            LOG_E("Device init failed");
+-        }
++//        if (!handleDeviceInit()) {
++//            LOG_E("Device init failed");
++//        }
+         (void)phOsalUwb_ProduceSemaphore(mTlvMutex);
+ 
+         /* Subscribe client*/
+@@ -497,6 +497,7 @@ static void BleApp_ConnectionCallback(deviceId_t peerDeviceId, gapConnectionEven
+             BleApp_Start();
+         }
+ 
++        PWR_AllowDeviceToSleep();
+ #if TAG_BUILD_CFG == MANUF_TEST_BUILD || TAG_BUILD_CFG == VALIDATION_V3_BUILD
+         bleConnection = TRUE;
+ #endif
+diff --git demos/SR040/demo_tracker_accel_trigger/main.c demos/SR040/demo_tracker_accel_trigger/main.c
+index d415d92..14e48ac 100644
+--- demos/SR040/demo_tracker_accel_trigger/main.c
++++ demos/SR040/demo_tracker_accel_trigger/main.c
+@@ -160,8 +160,9 @@ void tracker()
+         UWB_SET_APP_PARAM_VALUE(RFRAME_CONFIG, kUWB_RfFrameConfig_SP3),
+         UWB_SET_APP_PARAM_VALUE(SLOTS_PER_RR, 25),
+         UWB_SET_APP_PARAM_VALUE(RANGING_INTERVAL, 200),
+-        UWB_SET_APP_PARAM_VALUE(SFD_ID, 0),
+-        UWB_SET_APP_PARAM_VALUE(TX_POWER_ID, 20),
++        UWB_SET_APP_PARAM_VALUE(SFD_ID, 2),
++//        UWB_SET_APP_PARAM_VALUE(TX_POWER_ID, 20),
++		UWB_SET_APP_PARAM_VALUE(TX_ADAPTIVE_PAYLOAD_POWER, 1),
+     };
+     phRangingParams_t inRangingParams;
+     phUwbDevInfo_t devInfo;
+diff --git demos/SR040/demo_tracker_sr040/demo_tracker_sr040.c demos/SR040/demo_tracker_sr040/demo_tracker_sr040.c
+index 5fa91ba..9b65462 100644
+--- demos/SR040/demo_tracker_sr040/demo_tracker_sr040.c
++++ demos/SR040/demo_tracker_sr040/demo_tracker_sr040.c
+@@ -65,7 +65,8 @@ OSAL_TASK_RETURN_TYPE StandaloneTask(void *args)
+         UWB_SET_APP_PARAM_VALUE(SLOTS_PER_RR, 25),
+         UWB_SET_APP_PARAM_VALUE(RANGING_INTERVAL, 200),
+ 
+-        UWB_SET_APP_PARAM_VALUE(TX_POWER_ID, 20),
++//        UWB_SET_APP_PARAM_VALUE(TX_POWER_ID, 20),
++		UWB_SET_APP_PARAM_VALUE(TX_ADAPTIVE_PAYLOAD_POWER, 1),
+         UWB_SET_APP_PARAM_VALUE(MAX_RR_RETRY, 0),
+         UWB_SET_APP_PARAM_VALUE(SFD_ID, 2),
+ 
